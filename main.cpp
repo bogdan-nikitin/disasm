@@ -14,6 +14,7 @@ typedef uint8_t Opcode;
 typedef uint8_t Register;
 typedef uint8_t Funct3;
 typedef uint8_t Funct7;
+typedef int32_t Immediate;
 
 const char * const REG_ABI[] = {
     "zero",
@@ -241,11 +242,6 @@ void print_j(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     print_unknown(addr, instruction);
 }
 
-void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    print_unknown(addr, instruction);
-}
-
-
 void print_b(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     print_unknown(addr, instruction);
 }
@@ -262,23 +258,23 @@ void print_system(Elf32_Addr addr, Instruction instruction) {
 
 
 Register get_rd(Instruction instruction) {
-    return (instruction & 0b111110000000) >> 7;
+    return (instruction >> 7) & 0b11111;
 }
 
 Register get_rs1(Instruction instruction) {
-    return (instruction & 0b11111000000000000000) >> 15;
+    return (instruction >> 15) & 0b11111;
 }
 
 Register get_rs2(Instruction instruction) {
-    return (instruction & 0b1111100000000000000000000) >> 20;
+    return (instruction >> 20) & 0b11111;
 }
 
 Funct3 get_funct3(Instruction instruction) {
-    return (instruction & 0b111000000000000) >> 12;
+    return (instruction >> 12) & 0b111;
 }
 
 Funct7 get_funct7(Instruction instruction) {
-    return (instruction & 0b11111110000000000000000000000000) >> 25;
+    return (instruction >> 25) & 0b1111111;
 }
 
 const char * const get_reg_name(Register reg) {
@@ -286,7 +282,6 @@ const char * const get_reg_name(Register reg) {
 }
 
 const char * const get_r_cmd(Funct7 funct7, Funct3 funct3) {
-
     if (funct7 == 0b0000000 && funct3 == 0b000) {
         return "ADD";
     }
@@ -317,6 +312,7 @@ const char * const get_r_cmd(Funct7 funct7, Funct3 funct3) {
     else if (funct7 == 0b0000000 && funct3 == 0b111) {
         return "AND";
     }
+    // RV32M
     else if (funct7 == 0b0000001 && funct3 == 0b000) {
         return "MUL";
     }
@@ -341,19 +337,52 @@ const char * const get_r_cmd(Funct7 funct7, Funct3 funct3) {
     else if (funct7 == 0b0000001 && funct3 == 0b111) {
         return "REMU";
     }
-
     return nullptr;
 }
 
 void print_r(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    Funct3 funct3 = get_funct3(instruction);    
-    Funct7 funct7 = get_funct7(instruction);
-    const char * const cmd = get_r_cmd(funct7, funct3);
+    const char * const cmd = get_r_cmd(get_funct7(instruction), get_funct3(instruction));
     if (cmd == nullptr) {
         print_unknown(addr, instruction);
     }
     else {
         printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)));
+    }
+}
+
+Immediate get_immediate_i(Instruction instruction) {
+    return ((instruction >> 20) & 0b11111111111) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
+}
+
+const char * const get_i_cmd(Funct3 funct3, Opcode opcode) {
+    if (funct3 == 0b000 && opcode == 0b0010011) {
+        return "ADDI"; 
+    }
+    else if (funct3 == 0b010 && opcode == 0b0010011) {
+        return "SLTI"; 
+    }
+    else if (funct3 == 0b011 && opcode == 0b0010011) {
+        return "SLTIU"; 
+    }
+    else if (funct3 == 0b100 && opcode == 0b0010011) {
+        return "XORI"; 
+    }
+    else if (funct3 == 0b110 && opcode == 0b0010011) {
+        return "ORI"; 
+    }
+    else if (funct3 == 0b111 && opcode == 0b0010011) {
+        return "ANDI";
+    }
+    return nullptr;
+}
+
+void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    const char * const cmd = get_i_cmd(get_funct3(instruction), opcode);
+    if (cmd == nullptr) {
+        print_unknown(addr, instruction);
+    } else {
+        std::string immediate = std::to_string(get_immediate_i(instruction));
+        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), immediate.c_str());
     }
 }
 
