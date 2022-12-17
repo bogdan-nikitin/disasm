@@ -5,6 +5,50 @@
 #include <vector>
 #include <cstring>
 #include <string>
+#include <unordered_map>
+
+#define ILEN_BYTE 4
+
+typedef uint32_t Instruction;
+typedef uint8_t Opcode;
+typedef uint8_t Register;
+typedef uint8_t Funct3;
+typedef uint8_t Funct7;
+
+const char * const REG_ABI[] = {
+    "zero",
+    "ra",
+    "sp",
+    "gp",
+    "tp",
+    "t0",
+    "t1",
+    "t2",
+    "s0",
+    "s1",
+    "a0",
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "a7",
+    "s2",
+    "s3",
+    "s4",
+    "s5",
+    "s6",
+    "s7",
+    "s8",
+    "s9",
+    "s10",
+    "s11",
+    "t3",
+    "t4",
+    "t5",
+    "t6",
+};
 
 #define EI_NIDENT 16
 #define EI_MAG0 0
@@ -184,6 +228,169 @@ const char * get_bind(unsigned char st_info) {
     }
 }
 
+void print_unknown(Elf32_Addr addr, Instruction instruction) {
+    printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
+}
+
+
+void print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    print_unknown(addr, instruction);
+}
+
+void print_j(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    print_unknown(addr, instruction);
+}
+
+void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    print_unknown(addr, instruction);
+}
+
+
+void print_b(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    print_unknown(addr, instruction);
+}
+
+
+void print_s(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    print_unknown(addr, instruction);
+}
+
+
+void print_system(Elf32_Addr addr, Instruction instruction) {
+    print_unknown(addr, instruction);
+}
+
+
+Register get_rd(Instruction instruction) {
+    return (instruction & 0b111110000000) >> 7;
+}
+
+Register get_rs1(Instruction instruction) {
+    return (instruction & 0b11111000000000000000) >> 15;
+}
+
+Register get_rs2(Instruction instruction) {
+    return (instruction & 0b1111100000000000000000000) >> 20;
+}
+
+Funct3 get_funct3(Instruction instruction) {
+    return (instruction & 0b111000000000000) >> 12;
+}
+
+Funct7 get_funct7(Instruction instruction) {
+    return (instruction & 0b11111110000000000000000000000000) >> 25;
+}
+
+const char * const get_reg_name(Register reg) {
+    return REG_ABI[reg];
+}
+
+const char * const get_r_cmd(Funct7 funct7, Funct3 funct3) {
+
+    if (funct7 == 0b0000000 && funct3 == 0b000) {
+        return "ADD";
+    }
+    else if (funct7 == 0b0100000 && funct3 == 0b000) {
+        return "SUB";
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b001) {
+        return "SLL";
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b010) {
+        return "SLT"; 
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b011) {
+        return "SLTU"; 
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b100) {
+        return "XOR"; 
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b101) {
+        return "SRL";
+    }
+    else if (funct7 == 0b0100000 && funct3 == 0b101) {
+        return "SRA";
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b110) {
+        return "OR";
+    }
+    else if (funct7 == 0b0000000 && funct3 == 0b111) {
+        return "AND";
+    }
+    else if (funct7 == 0b0000001 && funct3 == 0b000) {
+        return "MUL";
+    }
+    else if (funct7 == 0b0000001 && funct3 == 0b001) {
+        return "MULH";
+    }
+    else if (funct7 == 0b0000001 && funct3 == 0b010) {
+        return "MULHSU";
+    }
+    else if (funct7 == 0b0000001 && funct3 == 0b011) {
+        return "MULHU";
+    } 
+    else if (funct7 == 0b0000001 && funct3 == 0b100) {
+        return "DIV"; 
+    } 
+    else if (funct7 == 0b0000001 && funct3 == 0b101) {
+        return "DIVU"; 
+    }
+    else if (funct7 == 0b0000001 && funct3 == 0b110) {
+        return "REM"; 
+    }
+    else if (funct7 == 0b0000001 && funct3 == 0b111) {
+        return "REMU";
+    }
+
+    return nullptr;
+}
+
+void print_r(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    Funct3 funct3 = get_funct3(instruction);    
+    Funct7 funct7 = get_funct7(instruction);
+    const char * const cmd = get_r_cmd(funct7, funct3);
+    if (cmd == nullptr) {
+        print_unknown(addr, instruction);
+    }
+    else {
+        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)));
+    }
+}
+
+void print_instruction(Elf32_Addr addr, Instruction instruction) {
+    Opcode opcode = instruction & 0b1111111;
+    switch (opcode) {
+        case 0b0110111:
+            print_u(addr, instruction, opcode);
+            break;
+        case 0b1101111:
+            print_j(addr, instruction, opcode);
+            break;
+        case 0b1100111:
+        case 0b0000011:
+        case 0b0010011:
+            print_i(addr, instruction, opcode);
+            break;
+        case 0b1100011:
+            print_b(addr, instruction, opcode);
+            break;
+        case 0b0100011:
+            print_s(addr, instruction, opcode);
+            break;
+            /*
+        case 0b0001111:
+            print_fence(addr, instruction);
+            break;
+            */
+        case 0b0110011:
+            print_r(addr, instruction, opcode);
+            break;
+        case 0b1110011:
+            print_system(addr, instruction);
+            break;
+    }
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         std::cout << "Specify input and output files and only" << std::endl;
@@ -228,17 +435,32 @@ int main(int argc, char* argv[]) {
             case SHT_SYMTAB:
                 symtab = section;
                 break;
+                /*
             case SHT_STRTAB:
                 if (strcmp(section_names_ptr + section->sh_name, ".strtab") == 0) {
                     strtab = section;
                 }
                 break;
+                */
         }
     }
+    strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
     printf("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
+    std::unordered_map<Elf32_Addr, const char *> labels;
     for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
         Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
         std::string index = get_index(sym->st_shndx);
-        printf("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), elf_ptr + strtab->sh_offset + sym->st_name);
+        const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
+        printf("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), name);
+        labels[sym->st_value] = name;
+    }
+    for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
+        Elf32_Addr addr = header->e_entry + i;
+        if (labels.find(addr) != labels.end()) {
+            printf("\n");
+            printf("%08x   <%s>:\n", addr, labels[addr]);
+        }
+        // printf("%x %x\n", header->e_entry + i, *((uint32_t *) (elf_ptr + text->sh_offset + i)));
+        print_instruction(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
     }
 }
