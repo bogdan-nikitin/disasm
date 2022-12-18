@@ -284,12 +284,6 @@ void print_b(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     print_unknown(addr, instruction);
 }
 
-
-void print_s(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    print_unknown(addr, instruction);
-}
-
-
 void print_system(Elf32_Addr addr, Instruction instruction) {
     print_unknown(addr, instruction);
 }
@@ -397,6 +391,10 @@ Immediate get_u_immediate(Instruction instruction) {
     return instruction >> 12;
 }
 
+Immediate get_s_immediate(Instruction instruction) {
+    return (instruction >> 7 & 0b11111 | (((instruction >> 25) & 0b111111) << 5)) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
+}
+
 const char * get_u_cmd(Opcode opcode) {
     switch (opcode) {
         case LUI:
@@ -407,6 +405,32 @@ const char * get_u_cmd(Opcode opcode) {
             return nullptr;
     }
 }
+
+const char * get_s_cmd(Funct3 funct3) {
+    switch (funct3) {
+        case 0b000:
+            return "SB";
+        case 0b001:
+            return "SH";
+        case 0b010:
+            return "SW";
+        default:
+            return nullptr;
+    }
+}
+
+
+void print_s(Elf32_Addr addr, Instruction instruction) {
+    const char * cmd = get_s_cmd(get_funct3(instruction));
+    if (cmd == nullptr) {
+        print_unknown(addr, instruction);
+    }
+    else {
+        std::string immediate = std::to_string(get_s_immediate(instruction));
+        printf("   %05x:\t%08x\t%7s\t%s, %s(%s)\n", addr, instruction, cmd, get_reg_name(get_rs2(instruction)), immediate.c_str(), get_reg_name(get_rs1(instruction)));
+    }
+}
+
 
 void print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     const char * const cmd = get_u_cmd(opcode);
@@ -514,8 +538,8 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
         case 0b1100011:
             print_b(addr, instruction, opcode);
             break;
-        case 0b0100011:
-            print_s(addr, instruction, opcode);
+        case STORE:
+            print_s(addr, instruction);
             break;
             /*
         case 0b0001111:
