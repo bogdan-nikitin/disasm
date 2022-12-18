@@ -19,12 +19,17 @@
 #define AUIPC 0b0010111
 #define JAL 0b1101111
 #define BRANCH 0b1100011
+#define SYSTEM 0b1110011
+#define PRIV 0b000
+#define ECALL 0b000000000000
+#define EBREAK 0b000000000001
 
 typedef uint32_t Instruction;
 typedef uint8_t Opcode;
 typedef uint8_t Register;
 typedef uint8_t Funct3;
 typedef uint8_t Funct7;
+typedef uint16_t Funct12;
 typedef int32_t Immediate;
 typedef uint8_t Shamt;
 typedef uint8_t ShiftType;
@@ -288,10 +293,6 @@ void print_unknown(Elf32_Addr addr, Instruction instruction) {
     printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
 }
 
-void print_system(Elf32_Addr addr, Instruction instruction) {
-    print_unknown(addr, instruction);
-}
-
 
 Register get_rd(Instruction instruction) {
     return (instruction >> 7) & 0b11111;
@@ -315,6 +316,10 @@ Funct7 get_funct7(Instruction instruction) {
 
 const char * get_reg_name(Register reg) {
     return REG_ABI[reg];
+}
+
+Funct12 get_funct12(Instruction instruction) {
+    return instruction >> 20;
 }
 
 const char * get_r_cmd(Funct7 funct7, Funct3 funct3) {
@@ -536,7 +541,7 @@ std::string format_target(Elf32_Addr addr, Immediate immediate) {
         if (!has_l_label(target)) {
             l_labels[target] = l_labels.size();
         }
-        label = std::to_string(l_labels[target]);
+        label = "L" + std::to_string(l_labels[target]);
     }
     return to_hex(target) + " <" + label + ">";
 }
@@ -581,6 +586,31 @@ void print_b(Elf32_Addr addr, Instruction instruction) {
 }
 
 
+const char * get_system_cmd(Instruction instruction) {
+    if (get_funct3(instruction) == PRIV && get_rd(instruction) == 0 && get_rs1(instruction) == 0) {
+        switch (get_funct12(instruction)) {
+            case ECALL:
+                return "ECALL";
+            case EBREAK:
+                return "EBREAK";
+            default:
+                return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+void print_system(Elf32_Addr addr, Instruction instruction) {
+    const char * cmd = get_system_cmd(instruction);
+    if (cmd == nullptr) {
+        print_unknown(addr, instruction);
+    }
+    else {
+        printf("   %05x:\t%08x\t%7s\n", addr, instruction, cmd);
+    }
+}
+
+
 void print_instruction(Elf32_Addr addr, Instruction instruction) {
     Opcode opcode = instruction & 0b1111111;
     switch (opcode) {
@@ -612,7 +642,7 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
         case OP:
             print_r(addr, instruction, opcode);
             break;
-        case 0b1110011:
+        case SYSTEM:
             print_system(addr, instruction);
             break;
         default:
