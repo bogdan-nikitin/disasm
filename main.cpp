@@ -17,6 +17,7 @@
 #define JALR 0b1100111
 #define LUI 0b0110111
 #define AUIPC 0b0010111
+#define JAL 0b1101111
 
 typedef uint32_t Instruction;
 typedef uint8_t Opcode;
@@ -61,6 +62,7 @@ const char * const REG_ABI[] = {
     "t5",
     "t6",
 };
+
 
 #define EI_NIDENT 16
 #define EI_MAG0 0
@@ -157,12 +159,14 @@ typedef struct {
     Elf32_Half st_shndx;
 } Elf32_Sym;
 
+std::unordered_map<Elf32_Addr, const char *> labels;  // TODO: Make local
+std::unordered_map<Elf32_Addr, Elf32_Addr> l_labels;  // TODO: Make local
 
 template <class T>
 std::string to_hex(T value)
 {
     std::ostringstream stream;
-    stream << std::hex << value;
+    stream << "0x" << std::hex << value;
     return stream.str();
 }
 
@@ -271,13 +275,16 @@ const char * get_load_jalr_cmd(Funct3 funct3, Opcode opcode) {
 
 }
 
+bool has_label(Elf32_Addr addr) {
+    return labels.find(addr) != labels.end();
+}
+
+bool has_l_label(Elf32_Addr addr) {
+    return l_labels.find(addr) != l_labels.end();
+}
 
 void print_unknown(Elf32_Addr addr, Instruction instruction) {
     printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
-}
-
-void print_j(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    print_unknown(addr, instruction);
 }
 
 void print_b(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
@@ -394,6 +401,11 @@ Immediate get_u_immediate(Instruction instruction) {
 Immediate get_s_immediate(Instruction instruction) {
     return (instruction >> 7 & 0b11111 | (((instruction >> 25) & 0b111111) << 5)) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
 }
+
+Immediate get_j_immediate(Instruction instruction) {
+    return (((instruction >> 21) & 0b1111111111) << 1) | (((instruction >> 20) & 1) << 11) | (instruction & 0b11111111000000000000) | ((instruction >> 31) ? 0b11111111111100000000000000000000 : 0);
+}
+
 
 const char * get_u_cmd(Opcode opcode) {
     switch (opcode) {
@@ -517,6 +529,26 @@ void print_load_jalr(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     }
 }
 
+std::string format_addr(Elf32_Addr addr, Immediate immediate) {
+    Elf32_Addr target = addr + immediate;
+    std::string label;
+    if (has_label(target)) {
+        label = labels[target];
+    }
+    else {
+        if (!has_l_label(target)) {
+            l_labels[target] = l_labels.size();
+        }
+        label = std::to_string(l_labels[target]);
+    }
+    return to_hex(target) + " <" + label + ">";
+}
+
+void print_j(Elf32_Addr addr, Instruction instruction) {
+    std::string target = format_addr(addr, get_j_immediate(instruction));
+    printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, "JAL", get_reg_name(get_rd(instruction)), target.c_str());
+}
+
 
 void print_instruction(Elf32_Addr addr, Instruction instruction) {
     Opcode opcode = instruction & 0b1111111;
@@ -529,8 +561,8 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
         case AUIPC:
             print_u(addr, instruction, opcode);
             break;
-        case 0b1101111:
-            print_j(addr, instruction, opcode);
+        case JAL:
+            print_j(addr, instruction);
             break;
         case OP_IMM:
             print_i(addr, instruction, opcode);
@@ -613,7 +645,6 @@ int main(int argc, char* argv[]) {
     }
     strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
     printf("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
-    std::unordered_map<Elf32_Addr, const char *> labels;
     for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
         Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
         std::string index = get_index(sym->st_shndx);
@@ -623,7 +654,7 @@ int main(int argc, char* argv[]) {
     }
     for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
         Elf32_Addr addr = header->e_entry + i;
-        if (labels.find(addr) != labels.end()) {
+        if (has_label(addr)) {
             printf("\n");
             printf("%08x   <%s>:\n", addr, labels[addr]);
         }
