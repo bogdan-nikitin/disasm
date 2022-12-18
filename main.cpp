@@ -9,12 +9,16 @@
 
 #define ILEN_BYTE 4
 
+#define OP_IMM 0b0010011
+
 typedef uint32_t Instruction;
 typedef uint8_t Opcode;
 typedef uint8_t Register;
 typedef uint8_t Funct3;
 typedef uint8_t Funct7;
 typedef int32_t Immediate;
+typedef uint8_t Shamt;
+typedef uint8_t ShiftType;
 
 const char * const REG_ABI[] = {
     "zero",
@@ -277,11 +281,11 @@ Funct7 get_funct7(Instruction instruction) {
     return (instruction >> 25) & 0b1111111;
 }
 
-const char * const get_reg_name(Register reg) {
+const char * get_reg_name(Register reg) {
     return REG_ABI[reg];
 }
 
-const char * const get_r_cmd(Funct7 funct7, Funct3 funct3) {
+const char * get_r_cmd(Funct7 funct7, Funct3 funct3) {
     if (funct7 == 0b0000000 && funct3 == 0b000) {
         return "ADD";
     }
@@ -354,35 +358,70 @@ Immediate get_immediate_i(Instruction instruction) {
     return ((instruction >> 20) & 0b11111111111) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
 }
 
-const char * const get_i_cmd(Funct3 funct3, Opcode opcode) {
-    if (funct3 == 0b000 && opcode == 0b0010011) {
+const char * get_i_cmd(Funct3 funct3, Opcode opcode) {
+    if (funct3 == 0b000 && opcode == OP_IMM) {
         return "ADDI"; 
     }
-    else if (funct3 == 0b010 && opcode == 0b0010011) {
+    else if (funct3 == 0b010 && opcode == OP_IMM) {
         return "SLTI"; 
     }
-    else if (funct3 == 0b011 && opcode == 0b0010011) {
+    else if (funct3 == 0b011 && opcode == OP_IMM) {
         return "SLTIU"; 
     }
-    else if (funct3 == 0b100 && opcode == 0b0010011) {
+    else if (funct3 == 0b100 && opcode == OP_IMM) {
         return "XORI"; 
     }
-    else if (funct3 == 0b110 && opcode == 0b0010011) {
+    else if (funct3 == 0b110 && opcode == OP_IMM) {
         return "ORI"; 
     }
-    else if (funct3 == 0b111 && opcode == 0b0010011) {
+    else if (funct3 == 0b111 && opcode == OP_IMM) {
         return "ANDI";
     }
     return nullptr;
 }
 
+bool is_i_shift(Funct3 funct3, Opcode opcode) {
+    return opcode == OP_IMM && (funct3 == 0b001 || funct3 == 0b101);
+}
+
+ShiftType get_shift_type(Instruction instruction) {
+    return instruction >> 25;
+}
+
+Shamt get_shamt(Instruction instruction) {
+    return (instruction >> 20) & 0b11111;
+}
+
+const char * get_shift_cmd(ShiftType shift_type, Funct3 funct3) {
+    if (shift_type == 0b0000000 && funct3 == 0b001) {
+        return "SLLI";
+    }
+    else if (shift_type == 0b0000000 && funct3 == 0b101) {
+        return "SRLI";
+    }
+    else if (shift_type == 0b0100000 && funct3 == 0b101) {
+        return "SRAI";
+    }
+    return nullptr;
+}
+
+
 void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    const char * const cmd = get_i_cmd(get_funct3(instruction), opcode);
+    Funct3 funct3 = get_funct3(instruction);
+    const char * cmd;
+    std::string arg;
+    if (is_i_shift(funct3, opcode)) {
+        cmd = get_shift_cmd(get_shift_type(instruction), funct3);
+        arg = std::to_string(get_shamt(instruction));
+    }
+    else {
+        cmd = get_i_cmd(funct3, opcode);
+        arg = std::to_string(get_immediate_i(instruction));
+    }
     if (cmd == nullptr) {
         print_unknown(addr, instruction);
     } else {
-        std::string immediate = std::to_string(get_immediate_i(instruction));
-        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), immediate.c_str());
+        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), arg.c_str());
     }
 }
 
@@ -397,7 +436,7 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
             break;
         case 0b1100111:
         case 0b0000011:
-        case 0b0010011:
+        case OP_IMM:
             print_i(addr, instruction, opcode);
             break;
         case 0b1100011:
@@ -416,6 +455,9 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
             break;
         case 0b1110011:
             print_system(addr, instruction);
+            break;
+        default:
+            print_unknown(addr, instruction);
             break;
     }
 }
