@@ -15,6 +15,8 @@
 #define LOAD 0b0000011 
 #define STORE 0b0100011
 #define JALR 0b1100111
+#define LUI 0b0110111
+#define AUIPC 0b0010111
 
 typedef uint32_t Instruction;
 typedef uint8_t Opcode;
@@ -274,11 +276,6 @@ void print_unknown(Elf32_Addr addr, Instruction instruction) {
     printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
 }
 
-
-void print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    print_unknown(addr, instruction);
-}
-
 void print_j(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     print_unknown(addr, instruction);
 }
@@ -395,6 +392,28 @@ Immediate get_i_immediate(Instruction instruction) {
     return ((instruction >> 20) & 0b11111111111) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
 }
 
+Immediate get_u_immediate(Instruction instruction) {
+    // return instruction & 0b11111111111111111111000000000000;
+    return instruction >> 12;
+}
+
+const char * get_u_cmd(Opcode opcode) {
+    switch (opcode) {
+        case LUI:
+            return "LUI";
+        case AUIPC:
+            return "AUIPC";
+        default:
+            return nullptr;
+    }
+}
+
+void print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    const char * const cmd = get_u_cmd(opcode);
+    std::string immediate = std::to_string(get_u_immediate(instruction));
+    printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), immediate.c_str());
+}
+
 const char * get_i_cmd(Funct3 funct3, Opcode opcode) {
     if (funct3 == 0b000 && opcode == OP_IMM) {
         return "ADDI"; 
@@ -482,7 +501,8 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
         case JALR:
             print_load_jalr(addr, instruction, opcode);
             break;
-        case 0b0110111:
+        case LUI:
+        case AUIPC:
             print_u(addr, instruction, opcode);
             break;
         case 0b1101111:
