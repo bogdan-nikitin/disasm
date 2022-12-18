@@ -5,11 +5,16 @@
 #include <vector>
 #include <cstring>
 #include <string>
+#include <sstream>
 #include <unordered_map>
 
 #define ILEN_BYTE 4
 
 #define OP_IMM 0b0010011
+#define OP 0b0110011
+#define LOAD 0b0000011 
+#define STORE 0b0100011
+#define JALR 0b1100111
 
 typedef uint32_t Instruction;
 typedef uint8_t Opcode;
@@ -151,6 +156,14 @@ typedef struct {
 } Elf32_Sym;
 
 
+template <class T>
+std::string to_hex(T value)
+{
+    std::ostringstream stream;
+    stream << std::hex << value;
+    return stream.str();
+}
+
 std::string get_index(Elf32_Half st_shndx) {
     switch (st_shndx) {
         case 0:
@@ -232,6 +245,30 @@ const char * get_bind(unsigned char st_info) {
             return nullptr;
     }
 }
+
+const char * get_load_jalr_cmd(Funct3 funct3, Opcode opcode) {
+    if (opcode == JALR && funct3 == 0b000) {
+        return "JALR";
+    } else if (opcode != LOAD) {
+        return nullptr;
+    }
+    switch (funct3) {
+        case 0b000:
+            return "LB"; 
+        case 0b001:
+            return "LH"; 
+        case 0b010:
+            return "LW"; 
+        case 0b100:
+            return "LBU"; 
+        case 0b101:
+            return "LHU";
+        default:
+            return nullptr;
+    }
+
+}
+
 
 void print_unknown(Elf32_Addr addr, Instruction instruction) {
     printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
@@ -354,7 +391,7 @@ void print_r(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     }
 }
 
-Immediate get_immediate_i(Instruction instruction) {
+Immediate get_i_immediate(Instruction instruction) {
     return ((instruction >> 20) & 0b11111111111) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
 }
 
@@ -416,7 +453,7 @@ void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     }
     else {
         cmd = get_i_cmd(funct3, opcode);
-        arg = std::to_string(get_immediate_i(instruction));
+        arg = std::to_string(get_i_immediate(instruction));
     }
     if (cmd == nullptr) {
         print_unknown(addr, instruction);
@@ -425,17 +462,32 @@ void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     }
 }
 
+
+void print_load_jalr(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+    const char * cmd = get_load_jalr_cmd(get_funct3(instruction), opcode);
+    if (cmd == nullptr) {
+        print_unknown(addr, instruction);
+    }
+    else {
+        std::string immediate = std::to_string(get_i_immediate(instruction));
+        printf("   %05x:\t%08x\t%7s\t%s, %s(%s)\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), immediate.c_str(), get_reg_name(get_rs1(instruction)));
+    }
+}
+
+
 void print_instruction(Elf32_Addr addr, Instruction instruction) {
     Opcode opcode = instruction & 0b1111111;
     switch (opcode) {
+        case LOAD:
+        case JALR:
+            print_load_jalr(addr, instruction, opcode);
+            break;
         case 0b0110111:
             print_u(addr, instruction, opcode);
             break;
         case 0b1101111:
             print_j(addr, instruction, opcode);
             break;
-        case 0b1100111:
-        case 0b0000011:
         case OP_IMM:
             print_i(addr, instruction, opcode);
             break;
@@ -450,7 +502,7 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
             print_fence(addr, instruction);
             break;
             */
-        case 0b0110011:
+        case OP:
             print_r(addr, instruction, opcode);
             break;
         case 0b1110011:
