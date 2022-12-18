@@ -77,6 +77,13 @@ const char * const REG_ABI[] = {
 #define EI_MAG3 3
 #define EI_CLASS 4
 
+#define	ELFCLASS32	1
+#define ELFDATA2LSB	1
+#define EV_CURRENT	1
+#define EI_DATA 5
+#define EI_VERSION 6
+#define EM_RISCV 0xf3
+
 #define SHT_PROGBITS 0x1
 #define SHT_SYMTAB 0x2
 #define SHT_STRTAB 0x3
@@ -396,7 +403,6 @@ Immediate get_i_immediate(Instruction instruction) {
 }
 
 Immediate get_u_immediate(Instruction instruction) {
-    // return instruction & 0b11111111111111111111000000000000;
     return instruction >> 12;
 }
 
@@ -675,8 +681,24 @@ int main(int argc, char* argv[]) {
         std::cout << "Input file is not ELF file" << std::endl;
         return 0;
     }
-    if (header->e_ident[EI_CLASS] == 2) {
-        std::cout << "64 bit files not supported" << std::endl;
+    if (header->e_ident[EI_CLASS] != ELFCLASS32) {
+        std::cout << "Only 32 bits files supported" << std::endl;
+        return 0;
+    }
+    if (header->e_ident[EI_DATA] != ELFDATA2LSB) {
+        std::cout << "Only little-endian files supported" << std::endl;
+        return 0;
+    }
+    if (header->e_ident[EI_VERSION] != EV_CURRENT) {
+        std::cout << "Incorrect ELF version" << std::endl;
+        return 0;
+    }
+    if (header->e_machine != EM_RISCV) {
+        std::cout << "Not RISC-V file" << std::endl;
+        return 0;
+    }
+    if (header->e_version != EV_CURRENT) {
+        std::cout << "Incorrect format version" << std::endl;
         return 0;
     }
     Elf32_Shdr *text;
@@ -695,13 +717,6 @@ int main(int argc, char* argv[]) {
             case SHT_SYMTAB:
                 symtab = section;
                 break;
-                /*
-            case SHT_STRTAB:
-                if (strcmp(section_names_ptr + section->sh_name, ".strtab") == 0) {
-                    strtab = section;
-                }
-                break;
-                */
         }
     }
     strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
@@ -719,7 +734,6 @@ int main(int argc, char* argv[]) {
             printf("\n");
             printf("%08x   <%s>:\n", addr, labels[addr]);
         }
-        // printf("%x %x\n", header->e_entry + i, *((uint32_t *) (elf_ptr + text->sh_offset + i)));
         print_instruction(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
     }
 }
