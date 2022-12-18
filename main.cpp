@@ -18,6 +18,7 @@
 #define LUI 0b0110111
 #define AUIPC 0b0010111
 #define JAL 0b1101111
+#define BRANCH 0b1100011
 
 typedef uint32_t Instruction;
 typedef uint8_t Opcode;
@@ -287,10 +288,6 @@ void print_unknown(Elf32_Addr addr, Instruction instruction) {
     printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
 }
 
-void print_b(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
-    print_unknown(addr, instruction);
-}
-
 void print_system(Elf32_Addr addr, Instruction instruction) {
     print_unknown(addr, instruction);
 }
@@ -529,7 +526,7 @@ void print_load_jalr(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     }
 }
 
-std::string format_addr(Elf32_Addr addr, Immediate immediate) {
+std::string format_target(Elf32_Addr addr, Immediate immediate) {
     Elf32_Addr target = addr + immediate;
     std::string label;
     if (has_label(target)) {
@@ -545,8 +542,42 @@ std::string format_addr(Elf32_Addr addr, Immediate immediate) {
 }
 
 void print_j(Elf32_Addr addr, Instruction instruction) {
-    std::string target = format_addr(addr, get_j_immediate(instruction));
+    std::string target = format_target(addr, get_j_immediate(instruction));
     printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, "JAL", get_reg_name(get_rd(instruction)), target.c_str());
+}
+
+Immediate get_b_immediate(Instruction instruction) {
+    return (((instruction >> 8) & 0b1111) << 1) | (((instruction >> 25) & 0b111111) << 5) | (((instruction >> 7) & 1) << 11) | ((instruction >> 31) ? 0b11111111111111111111000000000000 : 0);
+}
+
+const char * get_b_cmd(Funct3 funct3) {
+    switch (funct3) {
+        case 0b000:
+            return "BEQ"; 
+        case 0b001:
+            return "BNE"; 
+        case 0b100:
+            return "BLT"; 
+        case 0b101:
+            return "BGE"; 
+        case 0b110:
+            return "BLTU"; 
+        case 0b111:
+            return "BGEU";
+        default:
+            return nullptr;
+    }
+}
+
+void print_b(Elf32_Addr addr, Instruction instruction) {
+    const char * cmd = get_b_cmd(get_funct3(instruction));
+    if (cmd == nullptr) {
+        print_unknown(addr, instruction);
+    }
+    else {
+        std::string target = format_target(addr, get_b_immediate(instruction));
+        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)), target.c_str());
+    }
 }
 
 
@@ -567,8 +598,8 @@ void print_instruction(Elf32_Addr addr, Instruction instruction) {
         case OP_IMM:
             print_i(addr, instruction, opcode);
             break;
-        case 0b1100011:
-            print_b(addr, instruction, opcode);
+        case BRANCH:
+            print_b(addr, instruction);
             break;
         case STORE:
             print_s(addr, instruction);
