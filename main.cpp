@@ -168,21 +168,21 @@ const char * get_bind(unsigned char st_info) {
 
 const char * get_load_jalr_cmd(Funct3 funct3, Opcode opcode) {
     if (opcode == JALR && funct3 == 0b000) {
-        return "JALR";
+        return "jalr";
     } else if (opcode != LOAD) {
         return nullptr;
     }
     switch (funct3) {
         case 0b000:
-            return "LB"; 
+            return "lb"; 
         case 0b001:
-            return "LH"; 
+            return "lh"; 
         case 0b010:
-            return "LW"; 
+            return "lw"; 
         case 0b100:
-            return "LBU"; 
+            return "lbu"; 
         case 0b101:
-            return "LHU";
+            return "lhu";
         default:
             return nullptr;
     }
@@ -232,59 +232,59 @@ Funct12 get_funct12(Instruction instruction) {
 
 const char * get_r_cmd(Funct7 funct7, Funct3 funct3) {
     if (funct7 == 0b0000000 && funct3 == 0b000) {
-        return "ADD";
+        return "add";
     }
     else if (funct7 == 0b0100000 && funct3 == 0b000) {
-        return "SUB";
+        return "sub";
     }
     else if (funct7 == 0b0000000 && funct3 == 0b001) {
-        return "SLL";
+        return "sll";
     }
     else if (funct7 == 0b0000000 && funct3 == 0b010) {
-        return "SLT"; 
+        return "slt"; 
     }
     else if (funct7 == 0b0000000 && funct3 == 0b011) {
-        return "SLTU"; 
+        return "sltu"; 
     }
     else if (funct7 == 0b0000000 && funct3 == 0b100) {
-        return "XOR"; 
+        return "xor"; 
     }
     else if (funct7 == 0b0000000 && funct3 == 0b101) {
-        return "SRL";
+        return "srl";
     }
     else if (funct7 == 0b0100000 && funct3 == 0b101) {
-        return "SRA";
+        return "sra";
     }
     else if (funct7 == 0b0000000 && funct3 == 0b110) {
-        return "OR";
+        return "or";
     }
     else if (funct7 == 0b0000000 && funct3 == 0b111) {
-        return "AND";
+        return "and";
     }
     // RV32M
     else if (funct7 == 0b0000001 && funct3 == 0b000) {
-        return "MUL";
+        return "mul";
     }
     else if (funct7 == 0b0000001 && funct3 == 0b001) {
-        return "MULH";
+        return "mulh";
     }
     else if (funct7 == 0b0000001 && funct3 == 0b010) {
-        return "MULHSU";
+        return "mulhsu";
     }
     else if (funct7 == 0b0000001 && funct3 == 0b011) {
-        return "MULHU";
+        return "mulhu";
     } 
     else if (funct7 == 0b0000001 && funct3 == 0b100) {
-        return "DIV"; 
+        return "div"; 
     } 
     else if (funct7 == 0b0000001 && funct3 == 0b101) {
-        return "DIVU"; 
+        return "divu"; 
     }
     else if (funct7 == 0b0000001 && funct3 == 0b110) {
-        return "REM"; 
+        return "rem"; 
     }
     else if (funct7 == 0b0000001 && funct3 == 0b111) {
-        return "REMU";
+        return "remu";
     }
     return nullptr;
 }
@@ -319,9 +319,9 @@ Immediate get_j_immediate(Instruction instruction) {
 const char * get_u_cmd(Opcode opcode) {
     switch (opcode) {
         case LUI:
-            return "LUI";
+            return "lui";
         case AUIPC:
-            return "AUIPC";
+            return "auipc";
         default:
             return nullptr;
     }
@@ -330,11 +330,11 @@ const char * get_u_cmd(Opcode opcode) {
 const char * get_s_cmd(Funct3 funct3) {
     switch (funct3) {
         case 0b000:
-            return "SB";
+            return "sb";
         case 0b001:
-            return "SH";
+            return "sh";
         case 0b010:
-            return "SW";
+            return "sw";
         default:
             return nullptr;
     }
@@ -361,22 +361,22 @@ void print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
 
 const char * get_i_cmd(Funct3 funct3, Opcode opcode) {
     if (funct3 == 0b000 && opcode == OP_IMM) {
-        return "ADDI"; 
+        return "addi"; 
     }
     else if (funct3 == 0b010 && opcode == OP_IMM) {
-        return "SLTI"; 
+        return "slti"; 
     }
     else if (funct3 == 0b011 && opcode == OP_IMM) {
-        return "SLTIU"; 
+        return "sltiu"; 
     }
     else if (funct3 == 0b100 && opcode == OP_IMM) {
-        return "XORI"; 
+        return "xori"; 
     }
     else if (funct3 == 0b110 && opcode == OP_IMM) {
-        return "ORI"; 
+        return "ori"; 
     }
     else if (funct3 == 0b111 && opcode == OP_IMM) {
-        return "ANDI";
+        return "andi";
     }
     return nullptr;
 }
@@ -395,13 +395,13 @@ Shamt get_shamt(Instruction instruction) {
 
 const char * get_shift_cmd(ShiftType shift_type, Funct3 funct3) {
     if (shift_type == 0b0000000 && funct3 == 0b001) {
-        return "SLLI";
+        return "slli";
     }
     else if (shift_type == 0b0000000 && funct3 == 0b101) {
-        return "SRLI";
+        return "srli";
     }
     else if (shift_type == 0b0100000 && funct3 == 0b101) {
-        return "SRAI";
+        return "srai";
     }
     return nullptr;
 }
@@ -455,7 +455,7 @@ std::string format_target(Elf32_Addr addr, Immediate immediate) {
 
 void print_j(Elf32_Addr addr, Instruction instruction) {
     std::string target = format_target(addr, get_j_immediate(instruction));
-    printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, "JAL", get_reg_name(get_rd(instruction)), target.c_str());
+    printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, "jal", get_reg_name(get_rd(instruction)), target.c_str());
 }
 
 Immediate get_b_immediate(Instruction instruction) {
@@ -465,17 +465,17 @@ Immediate get_b_immediate(Instruction instruction) {
 const char * get_b_cmd(Funct3 funct3) {
     switch (funct3) {
         case 0b000:
-            return "BEQ"; 
+            return "beq"; 
         case 0b001:
-            return "BNE"; 
+            return "bne"; 
         case 0b100:
-            return "BLT"; 
+            return "blt"; 
         case 0b101:
-            return "BGE"; 
+            return "bge"; 
         case 0b110:
-            return "BLTU"; 
+            return "bltu"; 
         case 0b111:
-            return "BGEU";
+            return "bgeu";
         default:
             return nullptr;
     }
@@ -497,9 +497,9 @@ const char * get_system_cmd(Instruction instruction) {
     if (get_funct3(instruction) == PRIV && get_rd(instruction) == 0 && get_rs1(instruction) == 0) {
         switch (get_funct12(instruction)) {
             case ECALL:
-                return "ECALL";
+                return "ecall";
             case EBREAK:
-                return "EBREAK";
+                return "ebreak";
             default:
                 return nullptr;
         }
