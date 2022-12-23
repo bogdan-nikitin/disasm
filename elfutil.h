@@ -1,6 +1,7 @@
-#ifndef ELFDEF_H
-#define ELFDEF_H
+#ifndef ELFUTIL_H
+#define ELFUTIL_H
 
+#include <string>
 
 #define EI_NIDENT 16
 #define EI_MAG0 0
@@ -103,5 +104,14 @@ typedef struct {
     unsigned char st_other;
     Elf32_Half st_shndx;
 } Elf32_Sym;
+
+
+std::string get_index(Elf32_Half st_shndx); 
+
+const char * get_type(unsigned char st_info); 
+
+const char * get_vis(unsigned char st_other); 
+
+const char * get_bind(unsigned char st_info); 
 
 #endif
