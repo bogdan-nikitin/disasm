@@ -254,6 +254,70 @@ void Disasm::collect_l_labels() {
 }
 
 
+bool Disasm::process_section_header_table() {
+    Elf32_Shdr *section_names_strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + header->e_shstrndx * header->e_shentsize);
+    char *section_names_ptr = elf_ptr + section_names_strtab->sh_offset;
+    for (int i = 0; i < header->e_shnum; i++) {
+        Elf32_Shdr *section = (Elf32_Shdr *) (elf_ptr + header->e_shoff + i * header->e_shentsize);            
+        switch (section->sh_type) {
+            case SHT_PROGBITS:
+                if (strcmp(section_names_ptr + section->sh_name, ".text") == 0) {
+                    text = section;
+                }
+                break;
+            case SHT_SYMTAB:
+                symtab = section;
+                break;
+        }
+    }
+    if (text == nullptr) {
+        printf(".text not found\n");
+        return false;
+    }
+    else if (symtab == nullptr) {
+        printf(".symtab not found\n");
+        return false;
+    }
+    strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
+    return true;
+}
+
+
+void Disasm::collect_symtab_labels() {
+    for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
+        Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
+        const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
+        symtab_labels[sym->st_value] = name;
+    }
+}
+
+
+void Disasm::print_text() {
+    print(".text\n");
+    collect_l_labels();
+    for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
+        Elf32_Addr addr = header->e_entry + i;
+        if (has_label(addr)) {
+            std::string label = get_label(addr);
+            print("%08x   <%s>:\n", addr, label.c_str());
+        }
+        print_instruction(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
+    }
+}
+
+
+void Disasm::print_symtab() {
+    print(".symtab\n");
+    print("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
+    for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
+        Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
+        std::string index = get_index(sym->st_shndx);
+        const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
+        print("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), name);
+    }
+}
+
+
 void Disasm::process(const char *input_file_name, const char *output_file_name) {
     std::vector<char> elf_file_content;
     if (!read_input_file(elf_file_content, input_file_name)) {
@@ -292,45 +356,11 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
         printf("No entry point\n");
         return;
     }
-    Elf32_Shdr *section_names_strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + header->e_shstrndx * header->e_shentsize);
-    char *section_names_ptr = elf_ptr + section_names_strtab->sh_offset;
-    for (int i = 0; i < header->e_shnum; i++) {
-        Elf32_Shdr *section = (Elf32_Shdr *) (elf_ptr + header->e_shoff + i * header->e_shentsize);            
-        switch (section->sh_type) {
-            case SHT_PROGBITS:
-                if (strcmp(section_names_ptr + section->sh_name, ".text") == 0) {
-                    text = section;
-                }
-                break;
-            case SHT_SYMTAB:
-                symtab = section;
-                break;
-        }
-    }
-    if (text == nullptr) {
-        printf(".text not found\n");
+    if (!process_section_header_table()) {
         return;
     }
-    else if (symtab == nullptr) {
-        printf(".symtab not found\n");
-        return;
-    }
-    Elf32_Shdr *strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
-    print("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
-    for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
-        Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
-        std::string index = get_index(sym->st_shndx);
-        const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
-        print("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), name);
-        symtab_labels[sym->st_value] = name;
-    }
-    collect_l_labels();
-    for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
-        Elf32_Addr addr = header->e_entry + i;
-        if (has_label(addr)) {
-            std::string label = get_label(addr);
-            print("%08x   <%s>:\n", addr, label.c_str());
-        }
-        print_instruction(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
-    }
+    collect_symtab_labels();
+    print_text();
+    print("\n");
+    print_symtab();
 }

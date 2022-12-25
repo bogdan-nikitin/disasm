@@ -33,11 +33,16 @@ private:
     void print(const char *format, ...);
     bool read_input_file(std::vector<char> &dest, const char *input_file_name);
     void collect_l_labels();
+    bool process_section_header_table();
+    void collect_symtab_labels();
+    void print_text();
+    void print_symtab();
 
     std::unordered_map<Elf32_Addr, const char *> symtab_labels;
     std::unordered_map<Elf32_Addr, Elf32_Addr> l_labels;
     Elf32_Shdr *text = nullptr;
     Elf32_Shdr *symtab = nullptr;
+    Elf32_Shdr *strtab;
     char *elf_ptr;
     Elf32_Ehdr *header;
 };
