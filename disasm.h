@@ -17,9 +17,8 @@ private:
     bool has_symtab_label(Elf32_Addr addr); 
     bool has_l_label(Elf32_Addr addr); 
     bool has_label(Elf32_Addr addr); 
-
     void print_unknown(Elf32_Addr addr, Instruction instruction); 
-    void print_r(Elf32_Addr addr, Instruction instruction, Opcode opcode); 
+    void print_r(Elf32_Addr addr, Instruction instruction); 
     void print_s(Elf32_Addr addr, Instruction instruction); 
     void print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode); 
     void print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode); 

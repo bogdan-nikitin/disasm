@@ -5,22 +5,10 @@ std::string get_index(Elf32_Half st_shndx) {
     switch (st_shndx) {
         case 0:
             return "UNDEF";
-            /*
-        case 0xff00:
-            return "LORESERVE";
-            */
-        case 0xff00:
-            return "LOPROC";
-        case 0xff1f:
-            return "HIPROC";
-        case 0xff20:
-            return "LIVEPATCH";
-        case 	0xfff1:
+        case 0xfff1:
             return "ABS";
         case 0xfff2:
             return "COMMON";
-        case 0xffff:
-            return "HIRESERVE";
         default:
             return std::to_string(st_shndx);
     }
@@ -70,14 +58,6 @@ const char * get_bind(unsigned char st_info) {
             return "GLOBAL";
         case 2:
             return "WEAK";
-        case 10:
-            return "LOOS";
-        case 12:
-            return "HIOS";
-        case 13:
-            return "LOPROC";
-        case 15:
-            return "HIPROC";
         default:
             return nullptr;
     }

@@ -56,7 +56,7 @@ void Disasm::print_unknown(Elf32_Addr addr, Instruction instruction) {
 }
 
 
-void Disasm::print_r(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
+void Disasm::print_r(Elf32_Addr addr, Instruction instruction) {
     const char * const cmd = get_r_cmd(get_funct7(instruction), get_funct3(instruction));
     if (cmd == nullptr) {
         print_unknown(addr, instruction);
@@ -222,7 +222,7 @@ void Disasm::print_instruction(Elf32_Addr addr, Instruction instruction) {
             print_s(addr, instruction);
             break;
         case OP:
-            print_r(addr, instruction, opcode);
+            print_r(addr, instruction);
             break;
         case SYSTEM:
             print_system(addr, instruction);
@@ -235,10 +235,10 @@ void Disasm::print_instruction(Elf32_Addr addr, Instruction instruction) {
 
 
 void Disasm::report_error(const char *format, ...) {
-    printf("Error. ");
+    fprintf(stderr, "Error. ");
     va_list ptr;
     va_start(ptr, format);
-    vprintf(format, ptr);
+    vfprintf(stderr, format, ptr);
     va_end(ptr);
     printf("\n");
 }
@@ -277,7 +277,6 @@ bool Disasm::read_input_file(std::vector<char> &dest, const char *input_file_nam
 
 void Disasm::collect_l_labels() {
     for (Elf32_Word i = 0; i < text->sh_size; i += ILEN_BYTE) {
-        Elf32_Addr addr = header->e_entry + i;
         extract_l_label(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
     }
 }
@@ -341,7 +340,7 @@ bool Disasm::process_symtab() {
         }
         Elf32_Sym *sym = (Elf32_Sym *) (sym_ptr);
         long name_offset = strtab->sh_offset + sym->st_name;
-        const char * name = elf_ptr + name_offset;
+        const char *name = elf_ptr + name_offset;
         long max_length = elf_file_content.size() - name_offset;
         if (strnlen(name, max_length) == max_length) {
             report_error("Invalid .symtab (name of entry %ld not null terminated)");

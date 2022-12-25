@@ -3,7 +3,6 @@
 
 #include <string>
 
-#define EI_NIDENT 16
 #define EI_MAG0 0
 #define EI_MAG1 1 
 #define EI_MAG2 2
@@ -64,6 +63,9 @@ typedef int32_t Elf32_Sword;
 typedef uint32_t Elf32_Word;
 
 
+#define EI_NIDENT 16
+
+
 typedef struct {
     unsigned char e_ident[EI_NIDENT]; 
     Elf32_Half e_type;
@@ -75,7 +77,7 @@ typedef struct {
     Elf32_Word e_flags; 
     Elf32_Half e_ehsize;
     Elf32_Half e_phentsize;
-    Elf32_Half e_phnum;
+    Elf32_Half e_phum;
     Elf32_Half e_shentsize;
     Elf32_Half e_shnum;
     Elf32_Half e_shstrndx;

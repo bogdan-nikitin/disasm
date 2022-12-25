@@ -155,7 +155,7 @@ Immediate get_u_immediate(Instruction instruction) {
 }
 
 Immediate get_s_immediate(Instruction instruction) {
-    return (instruction >> 7 & 0b11111 | (((instruction >> 25) & 0b111111) << 5)) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
+    return ((instruction >> 7 & 0b11111) | (((instruction >> 25) & 0b111111) << 5)) | ((instruction >> 31) ? 0b11111111111111111111100000000000 : 0);
 }
 
 Immediate get_j_immediate(Instruction instruction) {
