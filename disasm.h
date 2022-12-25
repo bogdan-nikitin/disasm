@@ -2,6 +2,7 @@
 #define DISASM_H
 
 #include <unordered_map>
+#include <vector>
 
 #include "riscvutil.h"
 #include "elfutil.h"
@@ -27,6 +28,7 @@ private:
     void print_system(Elf32_Addr addr, Instruction instruction); 
     void print_instruction(Elf32_Addr addr, Instruction instruction); 
     void print(const char *format, ...);
+    bool read_input_file(std::vector<char> &dest, const char *input_file_name);
 
     std::unordered_map<Elf32_Addr, const char *> labels;
     std::unordered_map<Elf32_Addr, Elf32_Addr> l_labels;

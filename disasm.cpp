@@ -1,7 +1,5 @@
 #include <string>
-#include <iostream>
 #include <ios>
-#include <fstream>
 #include <vector>
 #include <cstring>
 #include <string>
@@ -9,6 +7,8 @@
 #include <unordered_map>
 #include <cstdio>
 #include <cstdarg>
+#include <cstdlib>
+#include <cerrno>
 
 #include "disasm.h"
 #include "riscvutil.h"
@@ -205,48 +205,58 @@ void Disasm::print(const char *format, ...) {
 }
 
 
+bool Disasm::read_input_file(std::vector<char> &dest, const char *input_file_name) {
+    FILE *elf_file = fopen(input_file_name, "rb");
+    if (elf_file == NULL) {
+        perror("Couldn't open input file");
+        return false;
+    }
+    fseek(elf_file, 0, SEEK_END);
+    long length = ftell(elf_file);
+    dest.resize(length);
+    fseek(elf_file, 0, SEEK_SET);
+    fread(&dest[0], length, 1, elf_file);
+    fclose(elf_file);
+    return true;
+}
+
+
 void Disasm::process(const char *input_file_name, const char *output_file_name) {
-    std::ifstream elf_file(input_file_name, std::ios::binary | std::ios::ate);
-    if (!elf_file.is_open()) {
-        std::cout << "Couldn't open file" << std::endl;
+    std::vector<char> elf_file_content;
+    if (!read_input_file(elf_file_content, input_file_name)) {
         return;
     }
-    int length = elf_file.tellg();
-    std::vector<char> elf_file_content(length);
-    elf_file.seekg(0, std::ios::beg);
-    elf_file.read(&elf_file_content[0], length);
-    elf_file.close();
     char *elf_ptr = &elf_file_content[0];
     Elf32_Ehdr *header = (Elf32_Ehdr *) elf_ptr;
     if (header->e_ident[EI_MAG0] != 0x7f ||
             header->e_ident[EI_MAG1] != 0x45 || 
             header->e_ident[EI_MAG2] != 0x4c ||
             header->e_ident[EI_MAG3] != 0x46) {
-        std::cout << "Input file is not ELF file" << std::endl;
+        printf("Input file is not ELF file\n");
         return;
     }
     if (header->e_ident[EI_CLASS] != ELFCLASS32) {
-        std::cout << "Only 32 bits files supported" << std::endl;
+        printf("Only 32 bits files supported\n");
         return;
     }
     if (header->e_ident[EI_DATA] != ELFDATA2LSB) {
-        std::cout << "Only little-endian files supported" << std::endl;
+        printf("Only little-endian files supported\n");
         return;
     }
     if (header->e_ident[EI_VERSION] != EV_CURRENT) {
-        std::cout << "Incorrect ELF version" << std::endl;
+        printf("Incorrect ELF version\n");
         return;
     }
     if (header->e_machine != EM_RISCV) {
-        std::cout << "Not RISC-V file" << std::endl;
+        printf("Not RISC-V file\n");
         return;
     }
     if (header->e_version != EV_CURRENT) {
-        std::cout << "Incorrect format version" << std::endl;
+        printf("Incorrect format version\n");
         return;
     }
     if (header->e_entry == 0) {
-        std::cout << "No entry point" << std::endl;
+        printf("No entry point\n");
         return;
     }
     Elf32_Shdr *text = nullptr;
@@ -267,11 +277,11 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
         }
     }
     if (text == nullptr) {
-        std::cout << ".text not found" << std::endl;
+        printf(".text not found\n");
         return;
     }
     else if (symtab == nullptr) {
-        std::cout << "symtab not found" << std::endl;
+        printf(".symtab not found\n");
         return;
     }
     Elf32_Shdr *strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
