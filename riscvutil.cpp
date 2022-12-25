@@ -257,3 +257,18 @@ const char * get_b_cmd(Funct3 funct3) {
             return nullptr;
     }
 }
+
+
+bool is_valid_b_instruction(Funct3 funct3) {
+    switch (funct3) {
+        case 0b000:
+        case 0b001:
+        case 0b100:
+        case 0b101:
+        case 0b110:
+        case 0b111:
+            return true;
+        default:
+            return false;
+    }
+}

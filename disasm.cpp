@@ -24,13 +24,18 @@ static std::string to_hex(T value)
 }
 
 
-bool Disasm::has_label(Elf32_Addr addr) {
-    return labels.find(addr) != labels.end();
+bool Disasm::has_symtab_label(Elf32_Addr addr) {
+    return symtab_labels.find(addr) != symtab_labels.end();
 }
 
 
 bool Disasm::has_l_label(Elf32_Addr addr) {
     return l_labels.find(addr) != l_labels.end();
+}
+
+
+bool Disasm::has_label(Elf32_Addr addr) {
+    return has_symtab_label(addr) || has_l_label(addr);
 }
 
 
@@ -101,19 +106,21 @@ void Disasm::print_load_jalr(Elf32_Addr addr, Instruction instruction, Opcode op
 }
 
 
-std::string Disasm::format_target(Elf32_Addr addr, Immediate immediate) {
-    Elf32_Addr target = addr + immediate;
+std::string Disasm::get_label(Elf32_Addr addr) {
     std::string label;
-    if (has_label(target)) {
-        label = labels[target];
+    if (has_symtab_label(addr)) {
+        label = symtab_labels[addr];
     }
     else {
-        if (!has_l_label(target)) {
-            l_labels[target] = l_labels.size();
-        }
-        label = "L" + std::to_string(l_labels[target]);
+        label = "L" + std::to_string(l_labels[addr]);
     }
-    return to_hex(target) + " <" + label + ">";
+    return label;
+}
+
+
+std::string Disasm::format_target(Elf32_Addr addr, Immediate immediate) {
+    Elf32_Addr target = addr + immediate;
+    return to_hex(target) + " <" + get_label(target) + ">";
 }
 
 
@@ -157,6 +164,24 @@ void Disasm::print_system(Elf32_Addr addr, Instruction instruction) {
     }
     else {
         print("   %05x:\t%08x\t%7s\n", addr, instruction, cmd);
+    }
+}
+
+
+void Disasm::extract_l_label(Elf32_Addr addr, Instruction instruction) {
+    Opcode opcode = instruction & 0b1111111;
+    Immediate immediate;
+    if (opcode == JAL) {
+        immediate = get_j_immediate(instruction);
+    }
+    else if (opcode == BRANCH && is_valid_b_instruction(get_funct3(instruction))) {
+        immediate = get_b_immediate(instruction);
+    } else {
+        return;
+    }
+    Elf32_Addr target = addr + immediate;
+    if (!has_label(target) && !has_l_label(target)) {
+        l_labels[target] = l_labels.size();
     }
 }
 
@@ -221,13 +246,21 @@ bool Disasm::read_input_file(std::vector<char> &dest, const char *input_file_nam
 }
 
 
+void Disasm::collect_l_labels() {
+    for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
+        Elf32_Addr addr = header->e_entry + i;
+        extract_l_label(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
+    }
+}
+
+
 void Disasm::process(const char *input_file_name, const char *output_file_name) {
     std::vector<char> elf_file_content;
     if (!read_input_file(elf_file_content, input_file_name)) {
         return;
     }
-    char *elf_ptr = &elf_file_content[0];
-    Elf32_Ehdr *header = (Elf32_Ehdr *) elf_ptr;
+    elf_ptr = &elf_file_content[0];
+    header = (Elf32_Ehdr *) elf_ptr;
     if (header->e_ident[EI_MAG0] != 0x7f ||
             header->e_ident[EI_MAG1] != 0x45 || 
             header->e_ident[EI_MAG2] != 0x4c ||
@@ -259,8 +292,6 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
         printf("No entry point\n");
         return;
     }
-    Elf32_Shdr *text = nullptr;
-    Elf32_Shdr *symtab = nullptr;
     Elf32_Shdr *section_names_strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + header->e_shstrndx * header->e_shentsize);
     char *section_names_ptr = elf_ptr + section_names_strtab->sh_offset;
     for (int i = 0; i < header->e_shnum; i++) {
@@ -291,13 +322,14 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
         std::string index = get_index(sym->st_shndx);
         const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
         print("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), name);
-        labels[sym->st_value] = name;
+        symtab_labels[sym->st_value] = name;
     }
+    collect_l_labels();
     for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
         Elf32_Addr addr = header->e_entry + i;
         if (has_label(addr)) {
-            print("\n");
-            print("%08x   <%s>:\n", addr, labels[addr]);
+            std::string label = get_label(addr);
+            print("%08x   <%s>:\n", addr, label.c_str());
         }
         print_instruction(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
     }

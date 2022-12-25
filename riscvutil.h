@@ -74,5 +74,6 @@ Immediate get_b_immediate(Instruction instruction);
 
 const char * get_b_cmd(Funct3 funct3); 
 
+bool is_valid_b_instruction(Funct3 funct3);
 
 #endif
