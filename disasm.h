@@ -26,6 +26,7 @@ private:
     const char * get_system_cmd(Instruction instruction); 
     void print_system(Elf32_Addr addr, Instruction instruction); 
     void print_instruction(Elf32_Addr addr, Instruction instruction); 
+    void print(const char *format, ...);
 
     std::unordered_map<Elf32_Addr, const char *> labels;
     std::unordered_map<Elf32_Addr, Elf32_Addr> l_labels;

@@ -7,6 +7,8 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <cstdio>
+#include <cstdarg>
 
 #include "disasm.h"
 #include "riscvutil.h"
@@ -33,7 +35,7 @@ bool Disasm::has_l_label(Elf32_Addr addr) {
 
 
 void Disasm::print_unknown(Elf32_Addr addr, Instruction instruction) {
-    printf("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
+    print("   %05x:\t%08x\tunknown_instruction\n", addr, instruction);
 }
 
 
@@ -43,7 +45,7 @@ void Disasm::print_r(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
         print_unknown(addr, instruction);
     }
     else {
-        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)));
+        print("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)));
     }
 }
 
@@ -55,7 +57,7 @@ void Disasm::Disasm::print_s(Elf32_Addr addr, Instruction instruction) {
     }
     else {
         std::string immediate = std::to_string(get_s_immediate(instruction));
-        printf("   %05x:\t%08x\t%7s\t%s, %s(%s)\n", addr, instruction, cmd, get_reg_name(get_rs2(instruction)), immediate.c_str(), get_reg_name(get_rs1(instruction)));
+        print("   %05x:\t%08x\t%7s\t%s, %s(%s)\n", addr, instruction, cmd, get_reg_name(get_rs2(instruction)), immediate.c_str(), get_reg_name(get_rs1(instruction)));
     }
 }
 
@@ -63,7 +65,7 @@ void Disasm::Disasm::print_s(Elf32_Addr addr, Instruction instruction) {
 void Disasm::print_u(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     const char * const cmd = get_u_cmd(opcode);
     std::string immediate = std::to_string(get_u_immediate(instruction));
-    printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), immediate.c_str());
+    print("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), immediate.c_str());
 }
 
 
@@ -82,7 +84,7 @@ void Disasm::print_i(Elf32_Addr addr, Instruction instruction, Opcode opcode) {
     if (cmd == nullptr) {
         print_unknown(addr, instruction);
     } else {
-        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), arg.c_str());
+        print("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), get_reg_name(get_rs1(instruction)), arg.c_str());
     }
 }
 
@@ -94,7 +96,7 @@ void Disasm::print_load_jalr(Elf32_Addr addr, Instruction instruction, Opcode op
     }
     else {
         std::string immediate = std::to_string(get_i_immediate(instruction));
-        printf("   %05x:\t%08x\t%7s\t%s, %s(%s)\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), immediate.c_str(), get_reg_name(get_rs1(instruction)));
+        print("   %05x:\t%08x\t%7s\t%s, %s(%s)\n", addr, instruction, cmd, get_reg_name(get_rd(instruction)), immediate.c_str(), get_reg_name(get_rs1(instruction)));
     }
 }
 
@@ -117,7 +119,7 @@ std::string Disasm::format_target(Elf32_Addr addr, Immediate immediate) {
 
 void Disasm::print_j(Elf32_Addr addr, Instruction instruction) {
     std::string target = format_target(addr, get_j_immediate(instruction));
-    printf("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, "jal", get_reg_name(get_rd(instruction)), target.c_str());
+    print("   %05x:\t%08x\t%7s\t%s, %s\n", addr, instruction, "jal", get_reg_name(get_rd(instruction)), target.c_str());
 }
 
 
@@ -128,7 +130,7 @@ void Disasm::print_b(Elf32_Addr addr, Instruction instruction) {
     }
     else {
         std::string target = format_target(addr, get_b_immediate(instruction));
-        printf("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)), target.c_str());
+        print("   %05x:\t%08x\t%7s\t%s, %s, %s\n", addr, instruction, cmd, get_reg_name(get_rs1(instruction)), get_reg_name(get_rs2(instruction)), target.c_str());
     }
 }
 
@@ -154,7 +156,7 @@ void Disasm::print_system(Elf32_Addr addr, Instruction instruction) {
         print_unknown(addr, instruction);
     }
     else {
-        printf("   %05x:\t%08x\t%7s\n", addr, instruction, cmd);
+        print("   %05x:\t%08x\t%7s\n", addr, instruction, cmd);
     }
 }
 
@@ -182,11 +184,6 @@ void Disasm::print_instruction(Elf32_Addr addr, Instruction instruction) {
         case STORE:
             print_s(addr, instruction);
             break;
-            /*
-        case 0b0001111:
-            print_fence(addr, instruction);
-            break;
-            */
         case OP:
             print_r(addr, instruction, opcode);
             break;
@@ -197,6 +194,14 @@ void Disasm::print_instruction(Elf32_Addr addr, Instruction instruction) {
             print_unknown(addr, instruction);
             break;
     }
+}
+
+
+void Disasm::print(const char *format, ...) {
+    va_list ptr;
+    va_start(ptr, format);
+    vprintf(format, ptr);
+    va_end(ptr);
 }
 
 
@@ -240,9 +245,12 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
         std::cout << "Incorrect format version" << std::endl;
         return;
     }
-    Elf32_Shdr *text;
-    Elf32_Shdr *symtab;
-    Elf32_Shdr *strtab;
+    if (header->e_entry == 0) {
+        std::cout << "No entry point" << std::endl;
+        return;
+    }
+    Elf32_Shdr *text = nullptr;
+    Elf32_Shdr *symtab = nullptr;
     Elf32_Shdr *section_names_strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + header->e_shstrndx * header->e_shentsize);
     char *section_names_ptr = elf_ptr + section_names_strtab->sh_offset;
     for (int i = 0; i < header->e_shnum; i++) {
@@ -258,20 +266,28 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
                 break;
         }
     }
-    strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
-    printf("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
+    if (text == nullptr) {
+        std::cout << ".text not found" << std::endl;
+        return;
+    }
+    else if (symtab == nullptr) {
+        std::cout << "symtab not found" << std::endl;
+        return;
+    }
+    Elf32_Shdr *strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
+    print("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
     for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
         Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
         std::string index = get_index(sym->st_shndx);
         const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
-        printf("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), name);
+        print("[%4i] 0x%-15X %5i %-8s %-8s %-8s %6s %s\n", i, sym->st_value, sym->st_size, get_type(sym->st_info), get_bind(sym->st_info), get_vis(sym->st_other), index.c_str(), name);
         labels[sym->st_value] = name;
     }
     for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
         Elf32_Addr addr = header->e_entry + i;
         if (has_label(addr)) {
-            printf("\n");
-            printf("%08x   <%s>:\n", addr, labels[addr]);
+            print("\n");
+            print("%08x   <%s>:\n", addr, labels[addr]);
         }
         print_instruction(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
     }
