@@ -318,6 +318,42 @@ void Disasm::print_symtab() {
 }
 
 
+bool Disasm::check_header() {
+    if (header->e_ident[EI_MAG0] != 0x7f ||
+            header->e_ident[EI_MAG1] != 0x45 || 
+            header->e_ident[EI_MAG2] != 0x4c ||
+            header->e_ident[EI_MAG3] != 0x46) {
+        printf("Input file is not ELF file\n");
+        return false;
+    }
+    if (header->e_ident[EI_CLASS] != ELFCLASS32) {
+        printf("Only 32 bits files supported\n");
+        return false;
+    }
+    if (header->e_ident[EI_DATA] != ELFDATA2LSB) {
+        printf("Only little-endian files supported\n");
+        return false;
+    }
+    if (header->e_ident[EI_VERSION] != EV_CURRENT) {
+        printf("Incorrect ELF version\n");
+        return false;
+    }
+    if (header->e_machine != EM_RISCV) {
+        printf("Not RISC-V file\n");
+        return false;
+    }
+    if (header->e_version != EV_CURRENT) {
+        printf("Incorrect format version\n");
+        return false;
+    }
+    if (header->e_entry == 0) {
+        printf("No entry point\n");
+        return false;
+    }
+    return true;
+}
+
+
 void Disasm::process(const char *input_file_name, const char *output_file_name) {
     std::vector<char> elf_file_content;
     if (!read_input_file(elf_file_content, input_file_name)) {
@@ -325,35 +361,7 @@ void Disasm::process(const char *input_file_name, const char *output_file_name) 
     }
     elf_ptr = &elf_file_content[0];
     header = (Elf32_Ehdr *) elf_ptr;
-    if (header->e_ident[EI_MAG0] != 0x7f ||
-            header->e_ident[EI_MAG1] != 0x45 || 
-            header->e_ident[EI_MAG2] != 0x4c ||
-            header->e_ident[EI_MAG3] != 0x46) {
-        printf("Input file is not ELF file\n");
-        return;
-    }
-    if (header->e_ident[EI_CLASS] != ELFCLASS32) {
-        printf("Only 32 bits files supported\n");
-        return;
-    }
-    if (header->e_ident[EI_DATA] != ELFDATA2LSB) {
-        printf("Only little-endian files supported\n");
-        return;
-    }
-    if (header->e_ident[EI_VERSION] != EV_CURRENT) {
-        printf("Incorrect ELF version\n");
-        return;
-    }
-    if (header->e_machine != EM_RISCV) {
-        printf("Not RISC-V file\n");
-        return;
-    }
-    if (header->e_version != EV_CURRENT) {
-        printf("Incorrect format version\n");
-        return;
-    }
-    if (header->e_entry == 0) {
-        printf("No entry point\n");
+    if (!check_header()) {
         return;
     }
     if (!process_section_header_table()) {

@@ -37,6 +37,7 @@ private:
     void collect_symtab_labels();
     void print_text();
     void print_symtab();
+    bool check_header();
 
     std::unordered_map<Elf32_Addr, const char *> symtab_labels;
     std::unordered_map<Elf32_Addr, Elf32_Addr> l_labels;
