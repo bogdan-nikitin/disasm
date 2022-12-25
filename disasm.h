@@ -12,6 +12,8 @@ class Disasm {
 public:
     void process(const char *input_file_name, const char *output_file_name);
 private:
+    long get_file_offset(const char *ptr);
+    bool in_file(const char *ptr, long size);
     bool has_symtab_label(Elf32_Addr addr); 
     bool has_l_label(Elf32_Addr addr); 
     bool has_label(Elf32_Addr addr); 
@@ -31,14 +33,18 @@ private:
     void extract_l_label(Elf32_Addr addr, Instruction instruction);
     void print_instruction(Elf32_Addr addr, Instruction instruction); 
     void print(const char *format, ...);
+    void report_error(const char *format, ...);
     bool read_input_file(std::vector<char> &dest, const char *input_file_name);
     void collect_l_labels();
     bool process_section_header_table();
-    void collect_symtab_labels();
+    bool process_symtab();
     void print_text();
     void print_symtab();
-    bool check_header();
+    bool process_header();
+    bool check_text();
+    bool open_write_file(const char *output_file_name);
 
+    std::vector<char> elf_file_content;
     std::unordered_map<Elf32_Addr, const char *> symtab_labels;
     std::unordered_map<Elf32_Addr, Elf32_Addr> l_labels;
     Elf32_Shdr *text = nullptr;
@@ -46,6 +52,8 @@ private:
     Elf32_Shdr *strtab;
     char *elf_ptr;
     Elf32_Ehdr *header;
+    FILE *output_file;
+    int write_error = 0;
 };
 
 #endif

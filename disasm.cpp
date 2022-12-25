@@ -9,6 +9,7 @@
 #include <cstdarg>
 #include <cstdlib>
 #include <cerrno>
+#include <algorithm>
 
 #include "disasm.h"
 #include "riscvutil.h"
@@ -21,6 +22,17 @@ static std::string to_hex(T value)
     std::ostringstream stream;
     stream << "0x" << std::hex << value;
     return stream.str();
+}
+
+
+long Disasm::get_file_offset(const char *ptr) {
+    return ptr - elf_ptr;
+}
+
+
+bool Disasm::in_file(const char *ptr, long size) {
+    long offset = get_file_offset(ptr);
+    return offset >= 0 && offset + size <= elf_file_content.size();
 }
 
 
@@ -222,10 +234,20 @@ void Disasm::print_instruction(Elf32_Addr addr, Instruction instruction) {
 }
 
 
-void Disasm::print(const char *format, ...) {
+void Disasm::report_error(const char *format, ...) {
+    printf("Error. ");
     va_list ptr;
     va_start(ptr, format);
     vprintf(format, ptr);
+    va_end(ptr);
+    printf("\n");
+}
+
+
+void Disasm::print(const char *format, ...) {
+    va_list ptr;
+    va_start(ptr, format);
+    write_error = std::min(write_error, vfprintf(output_file, format, ptr));
     va_end(ptr);
 }
 
@@ -233,7 +255,7 @@ void Disasm::print(const char *format, ...) {
 bool Disasm::read_input_file(std::vector<char> &dest, const char *input_file_name) {
     FILE *elf_file = fopen(input_file_name, "rb");
     if (elf_file == NULL) {
-        perror("Couldn't open input file");
+        perror("Error. Couldn't open input file");
         return false;
     }
     fseek(elf_file, 0, SEEK_END);
@@ -241,13 +263,20 @@ bool Disasm::read_input_file(std::vector<char> &dest, const char *input_file_nam
     dest.resize(length);
     fseek(elf_file, 0, SEEK_SET);
     fread(&dest[0], length, 1, elf_file);
-    fclose(elf_file);
+    if (fclose(elf_file) != 0) {
+        perror("Error. Couldn't close input file");
+        return false;
+    }
+    if (length == 0) {
+        report_error("Input file is empty");
+        return false;
+    }
     return true;
 }
 
 
 void Disasm::collect_l_labels() {
-    for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
+    for (Elf32_Word i = 0; i < text->sh_size; i += ILEN_BYTE) {
         Elf32_Addr addr = header->e_entry + i;
         extract_l_label(header->e_entry + i, *((Instruction *) (elf_ptr + text->sh_offset + i)));
     }
@@ -255,47 +284,78 @@ void Disasm::collect_l_labels() {
 
 
 bool Disasm::process_section_header_table() {
-    Elf32_Shdr *section_names_strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + header->e_shstrndx * header->e_shentsize);
+    char *section_names_strtab_ptr = elf_ptr + header->e_shoff + header->e_shstrndx * header->e_shentsize;
+    if (!in_file(section_names_strtab_ptr, sizeof(Elf32_Shdr))) {
+        report_error("No section header table");
+        return false;
+    }
+    Elf32_Shdr *section_names_strtab = (Elf32_Shdr *) (section_names_strtab_ptr);
     char *section_names_ptr = elf_ptr + section_names_strtab->sh_offset;
-    for (int i = 0; i < header->e_shnum; i++) {
-        Elf32_Shdr *section = (Elf32_Shdr *) (elf_ptr + header->e_shoff + i * header->e_shentsize);            
+    for (Elf32_Half i = 0; i < header->e_shnum; i++) {
+        char *section_ptr = elf_ptr + header->e_shoff + i * header->e_shentsize;
+        if (!in_file(section_ptr, sizeof(Elf32_Shdr))) {
+            report_error("No section %d", i);
+        }
+        Elf32_Shdr *section = (Elf32_Shdr *) (section_ptr);            
         switch (section->sh_type) {
             case SHT_PROGBITS:
-                if (strcmp(section_names_ptr + section->sh_name, ".text") == 0) {
+            {
+                const char *section_name = section_names_ptr + section->sh_name;
+                if (elf_file_content.size() - get_file_offset(section_name) > 5 && strcmp(section_name, ".text") == 0) {
                     text = section;
                 }
                 break;
+            }
             case SHT_SYMTAB:
                 symtab = section;
                 break;
         }
     }
     if (text == nullptr) {
-        printf(".text not found\n");
+        report_error(".text not found");
+        return false;
+    }
+    if (!check_text()) {
         return false;
     }
     else if (symtab == nullptr) {
-        printf(".symtab not found\n");
+        report_error(".symtab not found");
         return false;
     }
-    strtab = (Elf32_Shdr *) (elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize);
+    char *strtab_ptr = elf_ptr + header->e_shoff + symtab->sh_link * header->e_shentsize;
+    if (!in_file(strtab_ptr, sizeof(Elf32_Shdr))) {
+        report_error("No .strtab");
+        return false;
+    }
+    strtab = (Elf32_Shdr *) (strtab_ptr);
     return true;
 }
 
 
-void Disasm::collect_symtab_labels() {
-    for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
-        Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
-        const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
+bool Disasm::process_symtab() {
+    for (Elf32_Word i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
+        char *sym_ptr = elf_ptr + symtab->sh_offset + i * symtab->sh_entsize;
+        if (!in_file(sym_ptr, sizeof(Elf32_Sym))) {
+            report_error("No .symtab entry %d", i);
+            return false;
+        }
+        Elf32_Sym *sym = (Elf32_Sym *) (sym_ptr);
+        long name_offset = strtab->sh_offset + sym->st_name;
+        const char * name = elf_ptr + name_offset;
+        long max_length = elf_file_content.size() - name_offset;
+        if (strnlen(name, max_length) == max_length) {
+            report_error("Invalid .symtab (name of entry %ld not null terminated)");
+            return false;
+        }
         symtab_labels[sym->st_value] = name;
     }
+    return true;
 }
 
 
 void Disasm::print_text() {
     print(".text\n");
-    collect_l_labels();
-    for (int i = 0; i < text->sh_size; i += ILEN_BYTE) {
+    for (Elf32_Word i = 0; i < text->sh_size; i += ILEN_BYTE) {
         Elf32_Addr addr = header->e_entry + i;
         if (has_label(addr)) {
             std::string label = get_label(addr);
@@ -309,7 +369,7 @@ void Disasm::print_text() {
 void Disasm::print_symtab() {
     print(".symtab\n");
     print("Symbol Value          	Size Type 	Bind 	Vis   	Index Name\n");
-    for (int i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
+    for (Elf32_Word i = 0; i < symtab->sh_size / symtab->sh_entsize; i++) {
         Elf32_Sym *sym = (Elf32_Sym *) (elf_ptr + symtab->sh_offset + i * symtab->sh_entsize);
         std::string index = get_index(sym->st_shndx);
         const char * name = elf_ptr + strtab->sh_offset + sym->st_name;
@@ -318,36 +378,64 @@ void Disasm::print_symtab() {
 }
 
 
-bool Disasm::check_header() {
+bool Disasm::process_header() {
+    if (!in_file(elf_ptr, sizeof(Elf32_Ehdr))) {
+        report_error("No file header");
+        return false;
+    }
+    header = (Elf32_Ehdr *) elf_ptr;
     if (header->e_ident[EI_MAG0] != 0x7f ||
             header->e_ident[EI_MAG1] != 0x45 || 
             header->e_ident[EI_MAG2] != 0x4c ||
             header->e_ident[EI_MAG3] != 0x46) {
-        printf("Input file is not ELF file\n");
+        report_error("Input file is not ELF file");
         return false;
     }
     if (header->e_ident[EI_CLASS] != ELFCLASS32) {
-        printf("Only 32 bits files supported\n");
+        report_error("Only 32 bits files supported");
         return false;
     }
     if (header->e_ident[EI_DATA] != ELFDATA2LSB) {
-        printf("Only little-endian files supported\n");
+        report_error("Only little-endian files supported");
         return false;
     }
     if (header->e_ident[EI_VERSION] != EV_CURRENT) {
-        printf("Incorrect ELF version\n");
+        report_error("Incorrect ELF version");
         return false;
     }
     if (header->e_machine != EM_RISCV) {
-        printf("Not RISC-V file\n");
+        report_error("Not RISC-V file");
         return false;
     }
     if (header->e_version != EV_CURRENT) {
-        printf("Incorrect format version\n");
+        report_error("Incorrect format version");
         return false;
     }
     if (header->e_entry == 0) {
-        printf("No entry point\n");
+        report_error("No entry point");
+        return false;
+    }
+    return true;
+}
+
+
+bool Disasm::check_text() {
+    if (text->sh_size % ILEN_BYTE != 0) {
+        report_error("Invalid .text size");
+        return false;
+    }
+    if (text->sh_offset + text->sh_size > elf_file_content.size()) {
+        report_error("End of .text beyond file boundaries");
+        return false;
+    }
+    return true;
+}
+
+
+bool Disasm::open_write_file(const char *output_file_name) {
+    output_file = fopen(output_file_name, "wb");
+    if (output_file == NULL) {
+        perror("Error. Couldn't open the output file");
         return false;
     }
     return true;
@@ -355,20 +443,30 @@ bool Disasm::check_header() {
 
 
 void Disasm::process(const char *input_file_name, const char *output_file_name) {
-    std::vector<char> elf_file_content;
     if (!read_input_file(elf_file_content, input_file_name)) {
         return;
     }
     elf_ptr = &elf_file_content[0];
-    header = (Elf32_Ehdr *) elf_ptr;
-    if (!check_header()) {
+    if (!process_header()) {
         return;
     }
     if (!process_section_header_table()) {
         return;
     }
-    collect_symtab_labels();
+    if (!process_symtab()) {
+        return;
+    }
+    collect_l_labels();
+    if (!open_write_file(output_file_name)) {
+        return;
+    }
     print_text();
     print("\n");
     print_symtab();
+    if (write_error != 0) {
+        report_error("Errors occurred while writing to the output file, the output file is incorrect");
+    }
+    if (fclose(output_file) != 0) {
+        perror("Error. Couldn't close the output file");
+    }
 }
